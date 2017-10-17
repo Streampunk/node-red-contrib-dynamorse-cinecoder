@@ -15,26 +15,25 @@
 -->
 
 <script type="text/javascript">
-    RED.nodes.registerType('AVCi encoder',{
+    RED.nodes.registerType('Cinecoder encoder',{
       category: 'valve',
       color: '#A09D45',
       defaults: {
         name: { value : ""},
         maxBuffer : { value : 10, validate : RED.validators.number() },
         description : { value : "" },
-        device : { value : "", type : "device" },
         dstFormat: { value : "AVCi50" }
       },
       inputs:1,
       outputs:1,
       icon: "valve.png",
       label: function() {
-        return this.name || "AVCi encoder";
+        return this.name || "Cinecoder encoder";
       }
     });
 </script>
 
-<script type="text/x-red" data-template-name="AVCi encoder">
+<script type="text/x-red" data-template-name="Cinecoder encoder">
   <!-- Common to all funnel nodes -->
   <div class="form-row">
     <label for="node-input-name"><i class="fa fa-tag"></i> name</label>
@@ -43,10 +42,6 @@
   <div class="form-row">
     <label for="node-input-description"><i class="fa fa-info-circle"></i> description</label>
     <input type="text" id="node-input-description" placeholder="source and flow description">
-  </div>
-  <div class="form-row">
-    <label for="node-input-device"><i class="fa fa-tablet"></i> device</label>
-    <input type="text" id="node-input-device">
   </div>
   <div class="form-row">
     <label for="node-input-maxBuffer"><i class="fa fa-suitcase"></i> max buffer</label>
@@ -58,6 +53,7 @@
     <select name="node-input-dstFormat" id="node-input-dstFormat">
       <option value="AVCi50" selected>AVCi 50</option>
       <option value="AVCi100">AVCi 100</option>
+      <option value="AVCi800">AVC Ultra</option>
     </select>
   </div>
 </script>
@@ -69,8 +65,8 @@
 }
 </style>
 
-<script type="text/x-red" data-help-name="AVCi encoder">
-  <h1>Video encoder</h1>
+<script type="text/x-red" data-help-name="Cinecoder encoder">
+  <h1>Cinecoder encoder</h1>
   <p>Encodes uncompressed grains to the specified format, creating a new NMOS flow
   with the correct attributes.</p>
 
@@ -87,10 +83,6 @@
    <tr>
     <td><i class="fa fa-info-circle"></i> description</td>
     <td>Optional description of this NMOS output source and output flow.</td>
-   </tr>
-   <tr>
-    <td><i class="fa fa-tablet"></i> device</td>
-    <td>Select or create an NMOS device for this source and flow.</td>
    </tr>
    <tr>
     <td><i class="fa fa-suitcase"></i> max buffer</td>

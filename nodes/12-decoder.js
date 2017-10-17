@@ -13,108 +13,58 @@
   limitations under the License.
 */
 
-var util = require('util');
-var redioactive = require('node-red-contrib-dynamorse-core').Redioactive;
-var Grain = require('node-red-contrib-dynamorse-core').Grain;
-var cinecoder = require('cinecodernodejs');
+const util = require('util');
+const ValveCommon = require('./valveCommon.js').ValveCommon;
+const cinecoder = require('cinecodernodejs');
 
 module.exports = function (RED) {
-  function AVCiDecoder (config) {
+  function CinecoderDecoder (config) {
     RED.nodes.createNode(this, config);
-    redioactive.Valve.call(this, config);
-    this.srcFlow = null;
-    var dstFlow = null;
-    var dstBufLen = 0;
+    ValveCommon.call(this, RED, config);
+    
+    const decoder = new cinecoder.Decoder(() => this.log('Cinecoder decoder exiting'));
+    decoder.on('error', err => this.error('Cinecoder decoder error: ' + err));
 
-    if (!this.context().global.get('updated'))
-      return this.log('Waiting for global context updated.');
+    this.findSrcTags = cable => {
+      if (!Array.isArray(cable[0].video) && cable[0].video.length < 1) {
+        return Promise.reject('Logical cable does not contain video');
+      }
+      return cable[0].video[0].tags;
+    };
 
-    var decoder = new cinecoder.Decoder(function() {
-      console.log('AVCi decoder exiting');
-    });
-    decoder.on('error', function(err) {
-      console.log('AVCi decoder error: ' + err);
-    });
+    this.makeDstTags = srcTags => {
+      const dstTags = JSON.parse(JSON.stringify(srcTags));
+      dstTags.packing = 'UYVY10';
+      dstTags.sampling = 'YCbCr-4:2:2';
 
-    var node = this;
-    var nodeAPI = this.context().global.get('nodeAPI');
-    var ledger = this.context().global.get('ledger');
-    var localName = config.name || `${config.type}-${config.id}`;
-    var localDescription = config.description || `${config.type}-${config.id}`;
-    var pipelinesID = config.device ?
-      RED.nodes.getNode(config.device).nmos_id :
-      this.context().global.get('pipelinesID');
+      var encoding = srcTags.encodingName[0];
+      if ('AVCi50' === encoding)
+        dstTags.width = srcTags.width * 3 / 4;
+      dstTags.encodingName = 'raw';
+      return dstTags;
+    };
 
-    var source = new ledger.Source(null, null, localName, localDescription,
-      ledger.formats.video, null, null, pipelinesID, null);
+    this.setInfo = (srcTags, dstTags, duration, logLevel) => {
+      return decoder.setInfo(srcTags, dstTags, duration, logLevel);
+    };
 
-    function processGrain(x, dstBufLen, push, next) {
-      var dstBuf = Buffer.alloc(dstBufLen);
-      var numQueued = decoder.decode(x.buffers[0], dstBuf, (err, result) => {
-        if (err) {
-          push(err);
-        } else if (result) {
-          push(null, new Grain(result, x.ptpSync, x.ptpOrigin,
-                               x.timecode, dstFlow.id, source.id, x.duration));
-        }
+    this.processGrain = (x, dstBufLen, next, cb) => {
+      const dstBuf = Buffer.alloc(dstBufLen);
+      decoder.decode(x.buffers[0], dstBuf, (err, result) => {
+        cb(err, result);
         next();
       });
-    }
+    };
 
-    this.consume((err, x, push, next) => {
-      if (err) {
-        push(err);
-        next();
-      } else if (redioactive.isEnd(x)) {
-        decoder.quit(() => {
-          push(null, x);
-        });
-      } else if (Grain.isGrain(x)) {
-        if (!this.srcFlow) {
-          this.getNMOSFlow(x, (err, f) => {
-            if (err) return push("Failed to resolve NMOS flow.");
-            this.srcFlow = f;
+    this.quit = cb => {
+      decoder.quit(() => cb());
+    };
 
-            var dstTags = JSON.parse(JSON.stringify(this.srcFlow.tags));
-            dstTags["packing"] = [ "UYVY10" ];
-            dstTags["sampling"] = [ "YCbCr-4:2:2" ];
-
-            var encoding = this.srcFlow.tags.encodingName[0];
-            if ("AVCi50" === encoding) {
-              var srcWidth = +this.srcFlow.tags["width"];
-              dstTags["width"] = [ `${srcWidth * 3 / 4}` ];
-            }
-            dstTags["encodingName"] = [ "raw" ];
-
-            var formattedDstTags = JSON.stringify(dstTags, null, 2);
-            RED.comms.publish('debug', {
-              format: "AVCi decoder output flow tags:",
-              msg: formattedDstTags
-            }, true);
-
-            dstFlow = new ledger.Flow(null, null, localName, localDescription,
-              ledger.formats.video, dstTags, source.id, null);
-
-            nodeAPI.putResource(source).catch(err => {
-              push(`Unable to register source: ${err}`);
-            });
-            nodeAPI.putResource(dstFlow).then(() => {
-              dstBufLen = decoder.setInfo(this.srcFlow.tags, dstTags);
-              processGrain(x, dstBufLen, push, next);
-            }, err => {
-              push(`Unable to register flow: ${err}`);
-            });
-          });
-        } else {
-          processGrain(x, dstBufLen, push, next);
-        }
-      } else {
-        push(null, x);
-        next();
-      }
-    });
-    this.on('close', this.close);
+    this.closeValve = done => {
+      this.close(done);
+    };
   }
-  util.inherits(AVCiDecoder, redioactive.Valve);
-  RED.nodes.registerType("AVCi decoder", AVCiDecoder);
-}
+
+  util.inherits(CinecoderDecoder, ValveCommon);
+  RED.nodes.registerType('Cinecoder decoder', CinecoderDecoder);
+};

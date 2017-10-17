@@ -15,25 +15,25 @@
 -->
 
 <script type="text/javascript">
-    RED.nodes.registerType('AVCi decoder',{
+    RED.nodes.registerType('Cinecoder decoder',{
       category: 'valve',
       color: '#A09D45',
       defaults: {
         name: { value : ""},
         maxBuffer : { value : 10, validate : RED.validators.number() },
         description : { value : "" },
-        device : { value : "", type : "device" },
+        dstFormat: { value : "UYVY10" }
       },
       inputs:1,
       outputs:1,
       icon: "valve.png",
       label: function() {
-        return this.name || "AVCi decoder";
+        return this.name || "Cinecoder decoder";
       }
     });
 </script>
 
-<script type="text/x-red" data-template-name="AVCi decoder">
+<script type="text/x-red" data-template-name="Cinecoder decoder">
   <!-- Common to all funnel nodes -->
   <div class="form-row">
     <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
@@ -44,12 +44,15 @@
     <input type="text" id="node-input-description" placeholder="source and flow description">
   </div>
   <div class="form-row">
-    <label for="node-input-device"><i class="fa fa-tablet"></i> device</label>
-    <input type="text" id="node-input-device">
-  </div>
-  <div class="form-row">
     <label for="node-input-maxBuffer"><i class="fa fa-suitcase"></i> max buffer</label>
     <input type="number" id="node-input-maxBuffer" placeholder="10" style="width: 100px">
+  </div>
+  <div class="form-row">
+    <label for="node-input-dstFormat"><i class="fa fa-paw"></i> dest format</label>
+    <select name="node-input-dstFormat" id="node-input-dstFormat">
+      <option value="UYVY10" selected>UYVY10</option>
+      <option value="v210">V210</option>
+    </select>
   </div>
 </script>
 
@@ -60,8 +63,8 @@
 }
 </style>
 
-<script type="text/x-red" data-help-name="AVCi decoder">
-  <h1>Video decoder</h1>
+<script type="text/x-red" data-help-name="Cinecoder decoder">
+  <h1>Cinecoder decoder</h1>
   <p>Decodes compressed grains, creating a new NMOS flow with the correct attributes.</p>
 
   <h3>Parameters</h3>
@@ -79,12 +82,12 @@
     <td>Optional description of this NMOS source and output flow.</td>
    </tr>
    <tr>
-    <td><i class="fa fa-tablet"></i> device</td>
-    <td>Select or create an NMOS device for this source and flow.</td>
-   </tr>
-   <tr>
     <td><i class="fa fa-suitcase"></i> max buffer</td>
     <td>Maximum number of grains to buffer before overflowing.</td>
+   </tr>
+   <tr>
+    <td><i class="fa fa-paw"></i> dest format</td>
+    <td>Select the desired packing format of the node output.</td>
    </tr>
   </table>
   </div>

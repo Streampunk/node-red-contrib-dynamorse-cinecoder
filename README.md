@@ -1,6 +1,6 @@
 # node-red-contrib-dynamorse-cinecoder
 
-A set of nodes for IBM's [Node-RED](http://nodered.org) that support AVCi encoding and decoding using the Cinecoder package from [Cinegy GmbH](https://www.cinegy.com/). This package is a component of Streampunk Media's [dynamorse](https://github.com/Streampunk/node-red-contrib-dynamorse-core#readme) suite.
+A set of nodes for IBM's [Node-RED](http://nodered.org) that support encoding and decoding using the Cinecoder package from [Cinegy GmbH](https://www.cinegy.com/). This package is a component of Streampunk Media's [dynamorse](https://github.com/Streampunk/node-red-contrib-dynamorse-core#readme) suite.
 
 ## Installation
 
