@@ -29,7 +29,12 @@ module.exports = function (RED) {
       if (!Array.isArray(cable[0].video) && cable[0].video.length < 1) {
         return Promise.reject('Logical cable does not contain video');
       }
-      return cable[0].video[0].tags;
+
+      const srcTags = cable[0].video[0].tags;
+      if ('H264' === srcTags.encodingName)
+        srcTags.encodingName = 'AVCi';
+
+      return srcTags;
     };
 
     this.makeDstTags = srcTags => {
