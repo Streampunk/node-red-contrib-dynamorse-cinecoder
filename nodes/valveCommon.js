@@ -14,65 +14,122 @@
 */
 
 const util = require('util');
+const uuid = require('uuid');
 const redioactive = require('node-red-contrib-dynamorse-core').Redioactive;
 const Grain = require('node-red-contrib-dynamorse-core').Grain;
+const multiFlows = require('node-red-contrib-dynamorse-core').Multiflows;
 
 function ValveCommon (RED, config) {
   redioactive.Valve.call(this, config);
 
   const logLevel = ['fatal', 'error', 'warn', 'info', 'debug', 'trace'].indexOf(RED.settings.logging.console.level);
-  let srcTags = null;
-  let flowID = null;
-  let sourceID = null;
-  let dstBufLen = 0;
-  
-  this.doProcess = (x, dstBufLen, push, next) => {
-    this.processGrain(x, dstBufLen, next, (err, result) => {
-      if (err) {
-        push(err);
-      } else if (result) {
-        push(null, new Grain(result, x.ptpSync, x.ptpOrigin,
-          x.timecode, flowID, sourceID, x.duration));
-      }
+  let cableChecked = false;
+  let setupError = null;
+  let srcFlows = null;
+  let dstID = {};
+
+  this.doProcess = (grainSet, push) => {
+    const grainTypes = Object.keys(grainSet);
+    grainTypes.forEach(t => {
+      const srcBufArray = [];
+      grainSet[t].forEach(g => srcBufArray.push(g.grain.buffers[0]));
+      this.processGrain(t, srcBufArray, (err, result) => {
+        if (err) {
+          push(err);
+        } else if (result) {
+          const x = grainSet[t][0].grain;
+          push(null, new Grain(result, x.ptpSync, x.ptpOrigin,
+            x.timecode, dstID[t].flowID, dstID[t].sourceID, x.duration));
+        }
+        grainSet[t].forEach(g => g.next());
+      });
     });
   };
 
   this.consume((err, x, push, next) => {
     if (err) {
       push(err);
-      next();
+      next(redioactive.noTiming);
     } else if (redioactive.isEnd(x)) {
       this.quit(() => {
         push(null, x);
       });
     } else if (Grain.isGrain(x)) {
-      const nextJob = (srcTags) ?
+      const nextJob = (cableChecked) ?
         Promise.resolve(x) :
         this.findCable(x).then(cable => {
-          srcTags = this.findSrcTags(cable);
-          const dstTags = this.makeDstTags(srcTags);
-          const formattedDstTags = JSON.stringify(dstTags, null, 2);
+          if (cableChecked)
+            return x;
+
+          cableChecked = true;
+          const selCable = this.getProcessSources(cable);
+
+          let outCableSpec = {};
+          selCable.forEach(c => {
+            const cableTypes = Object.keys(c);
+            cableTypes.forEach(t => {
+              if (c[t] && Array.isArray(c[t]) && !outCableSpec[t]) {
+                const srcTags = c[t][0].tags;
+                const dstTags = this.makeDstTags(srcTags);
+                outCableSpec[t] = [{ tags: dstTags }];
+                if (!c[t][0].newFlowID) {
+                  outCableSpec[t][0].flowID = c[t][0].flowID;
+                  outCableSpec[t][0].sourceID = c[t][0].sourceID;
+                }
+              }
+            });
+          });
+          outCableSpec.backPressure = 'video[0]';
+
+          const outCable = this.makeCable(outCableSpec);
+          const formattedCable = JSON.stringify(outCable, null, 2);
           RED.comms.publish('debug', {
-            format: `${config.type} output flow tags:`,
-            msg: formattedDstTags
+            format: `${config.type} output cable:`,
+            msg: formattedCable
           }, true);
 
-          this.makeCable({ video : [{ tags : dstTags }], backPressure : 'video[0]' });
-          flowID = this.flowID();
-          sourceID = this.sourceID();
+          let dstTags = {};
+          const cableTypes = Object.keys(outCable);
+          cableTypes.forEach(t => {
+            if (outCable[t] && Array.isArray(outCable[t])) {
+              dstID[t] = { flowID: outCable[t][0].flowID, sourceID: outCable[t][0].sourceID };
+              dstTags[t] = outCable[t][0].tags;
+            }
+          });
 
-          dstBufLen = this.setInfo(srcTags, dstTags, x.duration, logLevel);
+          srcFlows = new multiFlows(selCable);
+          this.setInfo(srcFlows.getTags(), dstTags, x.duration, logLevel);
+          return x;
         });
 
-      nextJob.then(() => {
-        this.doProcess (x, dstBufLen, push, next);
+      nextJob.then(x => {
+        if (setupError) {
+          push(setupError);
+          return next(redioactive.noTiming);
+        }
+        else {
+          const queue = srcFlows.checkID(x);
+          if (queue) {
+            const grainSet = srcFlows.addGrain(x, queue, next);
+            if (grainSet) {
+              this.doProcess (grainSet, push);
+            }
+          } else {
+            this.log(`${config.type} dropping grain with flowID ${uuid.unparse(x.flow_id)}`);
+            return next(redioactive.noTiming);
+          }
+        }
       }).catch(err => {
-        push(err);
-        next();
+        if (!setupError) {
+          setupError = err;
+          console.log(setupError);
+        }
+        push(setupError);
+        next(redioactive.noTiming);
       });
     } else {
       push(null, x);
-      next();
+      next(redioactive.noTiming);
     }
   });
 

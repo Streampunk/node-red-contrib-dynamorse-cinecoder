@@ -22,43 +22,56 @@ module.exports = function (RED) {
     RED.nodes.createNode(this, config);
     ValveCommon.call(this, RED, config);
     
+    const numInputs = 1;
+    let dstBufLen = 0;
+
     const decoder = new cinecoder.Decoder(() => this.log('Cinecoder decoder exiting'));
     decoder.on('error', err => this.error('Cinecoder decoder error: ' + err));
 
-    this.findSrcTags = cable => {
-      if (!Array.isArray(cable[0].video) && cable[0].video.length < 1) {
-        return Promise.reject('Logical cable does not contain video');
+    this.getProcessSources = cable => {
+      // One video flow for processing, audio flows to pass through
+      let selCable = cable.filter((c, i) => i < numInputs);
+      if (Array.isArray(selCable[0].video)) {
+        selCable[0].video = selCable[0].video.filter((f, i) => i < numInputs);
+        selCable[0].video[0].newFlowID = true; // audio flows retain existing flowID, sourceID
+
+        // patch the encodingName tag to the expected string
+        const srcTags = selCable[0].video[0].tags;
+        if ('H264' === srcTags.encodingName)
+          srcTags.encodingName = 'AVCi';
+        selCable[0].video[0].tags = srcTags;
       }
-
-      const srcTags = cable[0].video[0].tags;
-      if ('H264' === srcTags.encodingName)
-        srcTags.encodingName = 'AVCi';
-
-      return srcTags;
+      return selCable;
     };
 
     this.makeDstTags = srcTags => {
       const dstTags = JSON.parse(JSON.stringify(srcTags));
-      dstTags.packing = 'UYVY10';
-      dstTags.sampling = 'YCbCr-4:2:2';
+      if ('video' === srcTags.format) {
+        dstTags.packing = 'UYVY10';
+        dstTags.sampling = 'YCbCr-4:2:2';
 
-      var encoding = srcTags.encodingName[0];
-      if ('AVCi50' === encoding)
-        dstTags.width = srcTags.width * 3 / 4;
-      dstTags.encodingName = 'raw';
+        var encoding = srcTags.encodingName;
+        if ('AVCi50' === encoding)
+          dstTags.width = srcTags.width * 3 / 4;
+        dstTags.encodingName = 'raw';
+      }
       return dstTags;
     };
 
     this.setInfo = (srcTags, dstTags, duration, logLevel) => {
-      return decoder.setInfo(srcTags, dstTags, duration, logLevel);
+      const srcVideoTags = srcTags.filter(t => 'video' === t.format)[0];
+      dstBufLen = decoder.setInfo(srcVideoTags, dstTags.video, duration, logLevel);
     };
 
-    this.processGrain = (x, dstBufLen, next, cb) => {
-      const dstBuf = Buffer.alloc(dstBufLen);
-      decoder.decode(x.buffers[0], dstBuf, (err, result) => {
-        cb(err, result);
-        next();
-      });
+    this.processGrain = (flowType, srcBufArray, cb) => {
+      if ('video' === flowType) {
+        const dstBuf = Buffer.alloc(dstBufLen);
+        decoder.decode(srcBufArray[0], dstBuf, (err, result) => {
+          cb(err, result);
+        });
+      } else {
+        cb(null, srcBufArray[0]);
+      }
     };
 
     this.quit = cb => {
