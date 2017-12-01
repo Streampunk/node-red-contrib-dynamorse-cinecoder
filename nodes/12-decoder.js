@@ -47,7 +47,7 @@ module.exports = function (RED) {
     this.makeDstTags = srcTags => {
       const dstTags = JSON.parse(JSON.stringify(srcTags));
       if ('video' === srcTags.format) {
-        dstTags.packing = 'UYVY10';
+        dstTags.packing = config.dstFormat;
         dstTags.sampling = 'YCbCr-4:2:2';
 
         var encoding = srcTags.encodingName;
