@@ -13,35 +13,35 @@
   limitations under the License.
 */
 
-const TestUtil = require('dynamorse-test').TestUtil;
+const TestUtil = require('dynamorse-test');
 
-const packerTestNode = JSON.stringify({
-  'type': 'packer',
-  'z': TestUtil.testFlowId,
-  'name': 'packer-test',
-  'x': 300.0,
-  'y': 100.0,
-  'wires': [[]]
+const packerTestNode = () => ({
+  type: 'packer',
+  z: TestUtil.testFlowId,
+  name: 'packer-test',
+  x: 300.0,
+  y: 100.0,
+  wires: [[]]
 });
 
-const encodeTestNode = JSON.stringify({
-  'type': 'Cinecoder encoder',
-  'z': TestUtil.testFlowId,
-  'name': 'encode-test',
-  'maxBuffer': 10,
-  'wsPort': TestUtil.properties.wsPort,
-  'x': 700.0,
-  'y': 100.0,
-  'wires': [[]]
+const encodeTestNode = () => ({
+  type: 'Cinecoder encoder',
+  z: TestUtil.testFlowId,
+  name: 'encode-test',
+  maxBuffer: 10,
+  wsPort: TestUtil.properties.wsPort,
+  x: 700.0,
+  y: 100.0,
+  wires: [[]]
 });
 
-const decodeTestNode = JSON.stringify({
-  'type': 'Cinecoder decoder',
-  'z': TestUtil.testFlowId,
-  'name': 'decode-test',
-  'x': 900.0,
-  'y': 100.0,
-  'wires': [[]]
+const decodeTestNode = () => ({
+  type: 'Cinecoder decoder',
+  z: TestUtil.testFlowId,
+  name: 'decode-test',
+  x: 900.0,
+  y: 100.0,
+  wires: [[]]
 });
 
 const funnelNodeId = '24fde3d7.b7544c';
@@ -60,43 +60,46 @@ TestUtil.nodeRedTest('A src->packer->encoder->decoder->spout flow is posted to N
   encodeFmt: 'AVCi 100',
   encoderMaxBuffer: 10,
   decoderMaxBuffer: 10,
+  decoderFmt: 'UYVY10',
   spoutTimeout: 0
 }, (params) => {
-  const testFlow = JSON.parse(TestUtil.testNodes.baseTestFlow);
-  testFlow.nodes[0] = JSON.parse(TestUtil.testNodes.funnelGrainNode);
-  testFlow.nodes[0].id = funnelNodeId;
-  testFlow.nodes[0].numPushes = params.numPushes;
-  testFlow.nodes[0].maxBuffer = params.funnelMaxBuffer;
-  testFlow.nodes[0].wires[0][0] = packer1NodeId;
-
-  testFlow.nodes[1] = JSON.parse(packerTestNode);
-  testFlow.nodes[1].id = packer1NodeId;
-  testFlow.nodes[1].dstFormat = params.packer1Fmt;
-  testFlow.nodes[1].maxBuffer = params.packerMaxBuffer;
-  testFlow.nodes[1].wires[0][0] = packer2NodeId;
-
-  testFlow.nodes[2] = JSON.parse(packerTestNode);
-  testFlow.nodes[2].id = packer2NodeId;
-  testFlow.nodes[2].dstFormat = params.packer2Fmt;
-  testFlow.nodes[2].maxBuffer = params.packerMaxBuffer;
-  testFlow.nodes[2].x = 500.0;
-  testFlow.nodes[2].wires[0][0] = encoderNodeId;
-
-  testFlow.nodes[3] = JSON.parse(encodeTestNode);
-  testFlow.nodes[3].id = encoderNodeId;
-  testFlow.nodes[3].dstFormat = params.encodeFmt;
-  testFlow.nodes[3].maxBuffer = params.encoderMaxBuffer;
-  testFlow.nodes[3].wires[0][0] = decoderNodeId;
-
-  testFlow.nodes[4] = JSON.parse(decodeTestNode);
-  testFlow.nodes[4].id = decoderNodeId;
-  testFlow.nodes[4].maxBuffer = params.decoderMaxBuffer;
-  testFlow.nodes[4].wires[0][0] = spoutNodeId;
-
-  testFlow.nodes[5] = JSON.parse(TestUtil.testNodes.spoutTestNode);
-  testFlow.nodes[5].id = spoutNodeId;
-  testFlow.nodes[5].timeout = params.spoutTimeout;
-  testFlow.nodes[5].x = 1100.0;
+  const testFlow = TestUtil.testNodes.baseTestFlow();
+  testFlow.nodes.push(Object.assign(TestUtil.testNodes.funnelGrainNode(), {
+    id: funnelNodeId,
+    numPushes: params.numPushes,
+    maxBuffer: params.funnelMaxBuffer,
+    wires: [ [ packer1NodeId ] ]
+  }));
+  testFlow.nodes.push(Object.assign(packerTestNode(), {
+    id: packer1NodeId,
+    dstFormat: params.packer1Fmt,
+    maxBuffer: params.packerMaxBuffer,
+    wires: [ [ packer2NodeId ] ]
+  }));
+  testFlow.nodes.push(Object.assign(packerTestNode(), {
+    id: packer2NodeId,
+    dstFormat: params.packer2Fmt,
+    maxBuffer: params.packerMaxBuffer,
+    x: 500.0,
+    wires: [ [ encoderNodeId ] ]
+  }));
+  testFlow.nodes.push(Object.assign(encodeTestNode(), {
+    id: encoderNodeId,
+    dstFormat: params.encodeFmt,
+    maxBuffer: params.encoderMaxBuffer,
+    wires: [ [ decoderNodeId ] ]
+  }));
+  testFlow.nodes.push(Object.assign(decodeTestNode(), {
+    id: decoderNodeId,
+    maxBuffer: params.decoderMaxBuffer,
+    dstFormat: params.decoderFmt,
+    wires: [ [ spoutNodeId ] ]
+  }));
+  testFlow.nodes.push(Object.assign(TestUtil.testNodes.spoutTestNode(), {
+    id: spoutNodeId,
+    timeout: params.spoutTimeout,
+    x: 1100.0
+  }));
   return testFlow;
 }, (t, params, msgObj, onEnd) => {
   //t.comment(`Message: ${JSON.stringify(msgObj)}`);
